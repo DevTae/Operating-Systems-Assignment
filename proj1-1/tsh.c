@@ -36,7 +36,7 @@ static int redirect(char *path, int *red_mode)
 	*red_mode = NONE;
     }
     else if(*red_mode == STDOUT) {
-	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 755);
+	fd = open(path, O_WRONLY | O_CREAT, 755);
 	dup2(fd, STDOUT_FILENO);
 	*red_mode = NONE; 
     }
