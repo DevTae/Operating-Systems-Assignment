@@ -5,7 +5,7 @@
  * 프로그램을 수정할 경우 날짜, 학과, 학번, 이름, 수정 내용을 기록한다.
  */
 /*
- * Comment here (copyright)
+ * Comment here (copyright) (23.3.19)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,13 +18,13 @@
 
 #define MAX_LINE 80             /* 명령어의 최대 길이 */
 
-// comment here (redirect_mode)
+// comment here (redirect_mode) (23.3.19)
 typedef enum
 {
     NONE = 0b00, STDIN = 0b01, STDOUT = 0b10
 } redirect_mode;
 
-// comment here
+// comment here (23.3.19)
 static int redirect(char *path, int *red_mode) 
 {
     int fd;
@@ -61,7 +61,7 @@ static void cmdexec(char *cmd)
     int oldfd_out;
     int red_mode = NONE;
 
-    // comment here (backup the fd)
+    // comment here (backup the fd) (23.3.19)
     dup2(STDIN_FILENO, oldfd_in);
     dup2(STDOUT_FILENO, oldfd_out);
 
@@ -86,7 +86,7 @@ static void cmdexec(char *cmd)
 		else
 		    redirect(q, &red_mode);
         }
-	// comment here
+	// comment here (23.3.19)
 	else if (*q == '<') {
 	    q = strsep(&p, "<");
 	    if (*q)
@@ -95,9 +95,9 @@ static void cmdexec(char *cmd)
 	        else
 		    redirect(q, &red_mode);
 
-	    red_mode = STDIN; // comment here
+	    red_mode = STDIN; // comment here (23.3.19)
 	}
-	// comment here
+	// comment here (23.3.19)
 	else if (*q == '>') {
 	    q = strsep(&p, ">");
 	    if (*q)
@@ -153,8 +153,8 @@ static void cmdexec(char *cmd)
      */
     if (argc > 0) {
         execvp(argv[0], argv);
-	dup2(oldfd_in, STDIN_FILENO); // comment here
-	dup2(oldfd_out, STDOUT_FILENO); // comment here
+	dup2(oldfd_in, STDIN_FILENO); // comment here (23.3.19)
+	dup2(oldfd_out, STDOUT_FILENO); // comment here (23.3.19)
     }
 }
 
