@@ -86,14 +86,22 @@ static void cmdexec(char *cmd)
 	// comment here
 	else if (*q == '<') {
 	    q = strsep(&p, "<");
-	    if (*q) argv[argc++] = q;
+	    if (*q)
+		if (red_mode == NONE)
+		    argv[argc++] = q;
+	        else
+		    redirect(q, &red_mode);
 
 	    red_mode = STDIN; // comment here
 	}
 	// comment here
 	else if (*q == '>') {
 	    q = strsep(&p, ">");
-	    if (*q) argv[argc++] = q;
+	    if (*q)
+		if (red_mode == NONE)
+		    argv[argc++] = q;
+	        else
+		    redirect(q, &red_mode);
 
 	    red_mode = STDOUT; // comment here
 	}
