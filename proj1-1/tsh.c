@@ -44,6 +44,16 @@ static int redirect(char *path, int *red_mode)
     return fd;
 }
 
+// comment here (23.3.20)
+static void clean_argvc(char *argv[], int *argc)
+{
+    for(int i = 0; i < *argc; i++) {
+	argv[i] = NULL;
+    }
+
+    *argc = 0;
+}
+
 /*
  * cmdexec - 명령어를 파싱해서 실행한다.
  * 스페이스와 탭을 공백문자로 간주하고, 연속된 공백문자는 하나의 공백문자로 축소한다. 
@@ -74,7 +84,7 @@ static void cmdexec(char *cmd)
         /*
          * 공백문자, 큰 따옴표, 작은 따옴표가 있는지 검사한다.
          */ 
-        q = strpbrk(p, " \t\'\"<>");
+        q = strpbrk(p, " \t\'\"<>|"); // comment here (23.3.20)
         /*
          * 공백문자가 있거나 아무 것도 없으면 공백문자까지 또는 전체를 하나의 인자로 처리한다.
          */
@@ -107,6 +117,41 @@ static void cmdexec(char *cmd)
 		    redirect(q, &red_mode);
 
 	    red_mode = STDOUT; // comment here
+	}
+	// comment here (23.3.20)
+	else if (*q == '|') {
+	    q = strsep(&p, "|");
+	    if (*q)
+		if (red_mode == NONE)
+		    argv[argc++] = q;
+	        else
+		    redirect(q, &red_mode);
+
+	    // comment here (23.3.20)
+	    int pid;
+	    int fd[2];
+	    if(pipe(fd) == -1) {
+		fprintf(stderr, "Pipe failed\n");
+		return;
+	    }
+	    if((pid = fork()) == -1) {
+		fprintf(stderr, "fork() error\n");
+		return;
+	    }
+	    // if child process,
+	    else if(pid == 0) {
+		close(fd[STDIN_FILENO]);
+		dup2(fd[STDOUT_FILENO], STDOUT_FILENO);
+		break;
+	    }
+	    // if parent process,
+	    else if(pid > 0) {
+		wait(NULL); // wait for child process (23.3.20)
+		close(fd[STDOUT_FILENO]);
+		dup2(fd[STDIN_FILENO], STDIN_FILENO);
+		clean_argvc(argv, &argc); // clean the argv and argc (23.3.20)
+		continue;
+	    }
 	}
         /*
          * 작은 따옴표가 있으면 그 위치까지 하나의 인자로 처리하고, 
