@@ -4,6 +4,9 @@
  * 한양대학교 ERICA 학생이 아닌 이는 프로그램을 수정하거나 배포할 수 없다.
  * 프로그램을 수정할 경우 날짜, 학과, 학번, 이름, 수정 내용을 기록한다.
  */
+/*
+ * Comment here (copyright)
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
