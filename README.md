@@ -3,10 +3,15 @@ This is the repository about the assignment in *Operating Systems Lecture (COM20
 
 <br/>
 
+-----
+
+## Tiny Shell (tsh)
+
 **\<How to execute\>**
 
-```
-#\> gcc tsh.c
+```Bash
+~$ gcc tsh.c
+~$ ./a.out
 ```
 
 <br/>
