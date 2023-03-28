@@ -5,7 +5,8 @@
  * 프로그램을 수정할 경우 날짜, 학과, 학번, 이름, 수정 내용을 기록한다.
  */
 /*
- * Comment here (copyright) (23.3.19)
+ * Edited by Kim Taehyeon (2023.3.19)
+ * Implemented Standard IO Redirection, Pipe features
  */
 #include <stdio.h>
 #include <stdlib.h>
