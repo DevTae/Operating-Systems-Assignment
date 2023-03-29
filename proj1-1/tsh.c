@@ -19,39 +19,44 @@
 
 #define MAX_LINE 80             /* 명령어의 최대 길이 */
 
-// comment here (redirect_mode) (23.3.19)
+// 리다이렉션 모드 구분을 위한 enum 선언 (23.3.19)
+// cmdexec 함수에서 red_mode 변수를 리다이렉션 모드로 할당하여 사용
+// 직관적인 구분을 위한 enum 사용하였음
 typedef enum
 {
     NONE = 0b00, STDIN = 0b01, STDOUT = 0b10
 } redirect_mode;
 
-// comment here (23.3.19)
-static int redirect(char *path, int *red_mode) 
+// 파일 경로와 입출력 방향을 바탕으로 리다이렉션 설정하는 함수 (23.3.19)
+// 인자에 포인터(int* red_mode)를 받아옴으로써, 호출함과 동시에 초기화를 시켜줄 수 있음.
+static void redirect(char *path, int *red_mode) 
 {
     int fd;
 
+    // 만약 설정된 리다이렉션 모드가 입력일 때
     if(*red_mode == STDIN)
     {
-	fd = open(path, O_RDONLY);
-	dup2(fd, STDIN_FILENO);
-	*red_mode = NONE;
+	fd = open(path, O_RDONLY); // 파일 읽기 모드로 fd 받아오기
+	dup2(fd, STDIN_FILENO); // 표준입력에 fd 복제하기
+	*red_mode = NONE; // red_mode 초기화
     }
+    // 만약 설정된 리다이렉션 모드가 출력일 때
     else if(*red_mode == STDOUT) {
-	fd = open(path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-	dup2(fd, STDOUT_FILENO);
-	*red_mode = NONE; 
+	fd = open(path, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH); // 파일 쓰기 모드로 fd 받아오기
+	dup2(fd, STDOUT_FILENO); // 표준출력에 fd 복제하기
+	*red_mode = NONE; // red_mode 초기화
     }
-
-    return fd;
 }
 
-// comment here (23.3.20)
+// 파이프 실행 시에 전 명령어 실행이 완료되었을 때 argv, argc 초기화하는 함수 (23.3.20)
 static void clean_argvc(char *argv[], int *argc)
 {
+    // argv 초기화
     for(int i = 0; i < *argc; i++) {
 	argv[i] = NULL;
     }
 
+    // argc 초기화
     *argc = 0;
 }
 
@@ -68,11 +73,11 @@ static void cmdexec(char *cmd)
     int argc = 0;               /* 인자의 개수 */
     char *p, *q;                /* 명령어를 파싱하기 위한 변수 */
     
-    int oldfd_in;
-    int oldfd_out;
-    int red_mode = NONE;
+    int oldfd_in;		/* 기존 표준입력 fd 백업 변수 (23.3.29) */
+    int oldfd_out;		/* 기존 표준출력 fd 백업 변수 (23.3.29) */
+    int red_mode = NONE;	/* 리다이렉션 모드 변수 (23.3.19) */
 
-    // comment here (backup the fd) (23.3.19)
+    // 기존 표준 입출력 fd 를 백업한다.  (23.3.19)
     dup2(STDIN_FILENO, oldfd_in);
     dup2(STDOUT_FILENO, oldfd_out);
 
@@ -85,73 +90,87 @@ static void cmdexec(char *cmd)
         /*
          * 공백문자, 큰 따옴표, 작은 따옴표가 있는지 검사한다.
          */ 
-        q = strpbrk(p, " \t\'\"<>|"); // comment here (23.3.20)
+	// 표준입출력 리다이렉션의 '<' 와 '>', 파이프의 '|' 또한 추가하였다. (23.3.20)
+        q = strpbrk(p, " \t\'\"<>|");
         /*
          * 공백문자가 있거나 아무 것도 없으면 공백문자까지 또는 전체를 하나의 인자로 처리한다.
          */
         if (q == NULL || *q == ' ' || *q == '\t') {
             q = strsep(&p, " \t");
 	    if (*q)
+		// 여기서 반복문을 돌며 q 에는 한 키워드씩 들어간다. (23.3.19)
+		// ex) cat "test file.txt" -> 'cat', '\"test file.txt\"'
+		// 이 키워드에 대해 구했을 때마다 argv 에 쌓을 것인지 리다이렉션을 진행할 것인지에 대해서만 정하면 된다.
+		// 앞으로의 if (*q) 부분이 모두 동일하다. (이하 생략)
+		
+		// red_mode 가 NONE 이라면
 		if (red_mode == NONE)
-		    argv[argc++] = q;
-		else
-		    redirect(q, &red_mode);
+		    argv[argc++] = q; // 리다이렉션 대상 파일 이름이 아니니 argv 에 집어넣어진다.
+		else // red_mode 가 NONE 이 아니라면
+		    redirect(q, &red_mode); // 리다이렉션 대상 파일 이름이니 리다이렉션을 진행한다.
         }
-	// comment here (23.3.19)
+	// 표준입력 리다이렉션 (23.3.19)
 	else if (*q == '<') {
 	    q = strsep(&p, "<");
 	    if (*q)
+		// red_mode 가 NONE 이라면
 		if (red_mode == NONE)
 		    argv[argc++] = q;
-	        else
-		    redirect(q, &red_mode);
-
-	    red_mode = STDIN; // comment here (23.3.19)
+	        else // red_mode 가 NONE 이 아니라면
+		    redirect(q, &red_mode); // 리다이렉션 대상 파일 이름이니 리다이렉션을 진행한다.
+		
+	    // 해당 '<' 기호가 나온 뒤의 q 가 리다이렉션 대상 파일 이름이기 때문에 red_mode 에 STDIN 을 할당한다. (23.3.19)
+	    // 그리고서 다음 while 문에서 q 가 구해지면 리다이렉션을 진행할 수 있다.
+	    red_mode = STDIN; // red_mode 에 STDIN 할당
 	}
-	// comment here (23.3.19)
+	// 표준출력 리다이렉션 (23.3.19)
 	else if (*q == '>') {
 	    q = strsep(&p, ">");
 	    if (*q)
+		// red_mode 가 NONE 이라면
 		if (red_mode == NONE)
 		    argv[argc++] = q;
-	        else
-		    redirect(q, &red_mode);
+	        else // red_mode 가 NONE 이 아니라면
+		    redirect(q, &red_mode); // 리다이렉션 대상 파일 이름이니 리다이렉션을 진행한다.
 
-	    red_mode = STDOUT; // comment here
+	    // 해당 '>' 기호가 나온 뒤의 q 가 리다이렉션 대상 파일 이름이기 때문에 red_mode 에 STDOUT 를 할당한다. (23.3.19)
+	    red_mode = STDOUT; // red_mode 에 STDOUT 할당
 	}
-	// comment here (23.3.20)
+	// 파이프 기능 구현 (23.3.20)
 	else if (*q == '|') {
 	    q = strsep(&p, "|");
 	    if (*q)
+		// red_mode 가 NONE 이라면
 		if (red_mode == NONE)
-		    argv[argc++] = q;
-	        else
-		    redirect(q, &red_mode);
+		    argv[argc++] = q; // argv 에 q 저장
+	        else // red_mode 가 NONE 이 아니라면
+		    redirect(q, &red_mode); // 리다이렉션 대상 파일 이름이므로 리다이렉션 진행
 
-	    // comment here (23.3.20)
+	    // 파이프 fd 를 저장할 변수 선언 (23.3.20)
 	    int pid;
 	    int fd[2];
-	    if(pipe(fd) == -1) {
+	    // fd[2] 에 해당 프로세스와 해당 프로세스의 자식 프로세스와 통신할 수 있는 파이프의 fd 를 할당함
+	    if(pipe(fd) == -1) { // pipe 할당에 실패했을 경우
 		fprintf(stderr, "Pipe failed\n");
-		return;
+		return; // 함수 종료
 	    }
-	    if((pid = fork()) == -1) {
+	    if((pid = fork()) == -1) { // fork() 함수 호출에 실패했을 경우
 		fprintf(stderr, "fork() error\n");
-		return;
+		return; // 함수 종료
 	    }
-	    // if child process,
+	    // 만약 해당 함수의 자식 프로세스라면 (23.3.20)
 	    else if(pid == 0) {
-		close(fd[STDIN_FILENO]);
-		dup2(fd[STDOUT_FILENO], STDOUT_FILENO);
-		break;
+		close(fd[STDIN_FILENO]); // 사용하지 않는 fd[0] 닫기
+		dup2(fd[STDOUT_FILENO], STDOUT_FILENO); // 해당 자식 프로세스의 표준 출력 파일 디스크립터를 파이프의 fd[1] 로 변경
+		break; // 반복문 종료 후 쌓인 argv, argc 를 바탕으로 파이프 기준 왼쪽 명령문 실행
 	    }
-	    // if parent process,
+	    // 만약 해당 함수의 본인이라면 (23.3.20)
 	    else if(pid > 0) {
-		wait(NULL); // wait for child process (23.3.20)
-		close(fd[STDOUT_FILENO]);
-		dup2(fd[STDIN_FILENO], STDIN_FILENO);
-		clean_argvc(argv, &argc); // clean the argv and argc (23.3.20)
-		continue;
+		wait(NULL); // 자식 프로세스가 종료되길 기다린다.
+		close(fd[STDOUT_FILENO]); // 사용하지 않는 fd[1] 닫기
+		dup2(fd[STDIN_FILENO], STDIN_FILENO); // 해당 본인 프로세스의 표준 입력 파일 디스크립터를 파이프의 fd[0] 로 변경
+		clean_argvc(argv, &argc); // 이미 저장되어 있는 argv, argc 를 바탕으로 실행되었기 때문에 지워준다.
+		continue; // 이어서 p 를 탐색한다.
 	    }
 	}
         /*
@@ -162,16 +181,18 @@ static void cmdexec(char *cmd)
         else if (*q == '\'') {
             q = strsep(&p, "\'");
             if (*q)
+		// red_mode 가 NONE 이라면 (23.3.19)
 		if (red_mode == NONE)
-		    argv[argc++] = q;
-	        else
-		    redirect(q, &red_mode);
+		    argv[argc++] = q; // 리다이렉션 대상 파일이 아니므로 argv 데이터에 추가
+	        else // red_mode 가 NONE 이 아니라면
+		    redirect(q, &red_mode); // 리다이렉션 대상 파일 이름이므로 리다이렉션 함수 호출
             q = strsep(&p, "\'");
             if (*q)
+		// red_mode 가 NONE 이라면 (23.3.19)
 		if (red_mode == NONE)
-		    argv[argc++] = q;
-	        else
-		    redirect(q, &red_mode);
+		    argv[argc++] = q; // 리다이렉션 대상 파일이 아니므로 argv 데이터에 추가
+	        else // red_mode 가 NONE 이 아니라면
+		    redirect(q, &red_mode); // 리다이렉션 대상 파일 이름이므로 리다이렉션 함수 호출
         }
         /*
          * 큰 따옴표가 있으면 그 위치까지 하나의 인자로 처리하고, 
@@ -181,16 +202,18 @@ static void cmdexec(char *cmd)
         else {
             q = strsep(&p, "\"");
             if (*q) 
+		// red_mode 가 NONE 이라면 (23.3.19)
 		if (red_mode == NONE)
-		    argv[argc++] = q;
-	        else
-		    redirect(q, &red_mode);
+		    argv[argc++] = q; // 리다이렉션 대상 파일이 아니므로 argv 데이터에 추가
+	        else // red_mode 가 NONE 이 아니라면
+		    redirect(q, &red_mode); // 리다이렉션 대상 파일 이름이므로 리다이렉션 함수 호출
             q = strsep(&p, "\"");
             if (*q)
+		// red_mode 가 NONE 이라면 (23.3.19)
 		if (red_mode == NONE)
-		    argv[argc++] = q;
-	        else
-		    redirect(q, &red_mode);
+		    argv[argc++] = q; // 리다이렉션 대상 파일이 아니므로 argv 데이터에 추가
+	        else // red_mode 가 NONE 이 아니라면
+		    redirect(q, &red_mode); // 리다이렉션 대상 파일 이름이므로 리다이렉션 함수 호출
         }        
     } while (p);
     argv[argc] = NULL;
@@ -199,8 +222,8 @@ static void cmdexec(char *cmd)
      */
     if (argc > 0) {
         execvp(argv[0], argv);
-	dup2(oldfd_in, STDIN_FILENO); // comment here (23.3.19)
-	dup2(oldfd_out, STDOUT_FILENO); // comment here (23.3.19)
+	dup2(oldfd_in, STDIN_FILENO); // 기존 표준입력 fd 복구 (23.3.19)
+	dup2(oldfd_out, STDOUT_FILENO); // 기존 표준출력 fd 복구 (23.3.19)
     }
 }
 
