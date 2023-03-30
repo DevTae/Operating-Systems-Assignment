@@ -112,9 +112,7 @@ void *check_subgrid(void *arg)
     bool num[10] = { false, };
     
     // 매개변수 arg 를 바탕으로 서브그리드에 대한 검사 진행 (23.3.30)
-    int* p_arg = (int*) arg;
-    int k = *p_arg;
-    printf("k is %d\n", k);
+    int k = *(int*)arg;
 
     valid[2][k] = true; // k 번째 서브그리드에서 숫자 중복이 없다고 가정
 
@@ -183,26 +181,14 @@ void check_sudoku(void)
     // 여기를 완성하세요
     
     // check_subgrid() 함수 쓰레드 실행 (23.3.30)
-    //for(i = 0; i < 9; i++) {
-//	if(pthread_create(&tid[2+i], NULL, check_subgrid, (void*)&i) != 0) {
-//	    fprintf(stderr, "pthread_create error: check_subgrid\n");
-//	    return;
-//	}
- //   }
- //
-    int index[9] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
-
-    if(pthread_create(&tid[2], NULL, check_subgrid, (void*)&index[0]) != 0
-    || pthread_create(&tid[3], NULL, check_subgrid, (void*)&index[1]) != 0
-    || pthread_create(&tid[4], NULL, check_subgrid, (void*)&index[2]) != 0
-    || pthread_create(&tid[5], NULL, check_subgrid, (void*)&index[3]) != 0
-    || pthread_create(&tid[6], NULL, check_subgrid, (void*)&index[4]) != 0
-    || pthread_create(&tid[7], NULL, check_subgrid, (void*)&index[5]) != 0
-    || pthread_create(&tid[8], NULL, check_subgrid, (void*)&index[6]) != 0
-    || pthread_create(&tid[9], NULL, check_subgrid, (void*)&index[7]) != 0
-    || pthread_create(&tid[10], NULL, check_subgrid, (void*)&index[8]) != 0) {
-	fprintf("std
+    int num[9] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 }; // i 값을 바탕으로 진행하면 쓰레드에서 값이 공유되기 때문에 배열 선언
+    for(i = 0; i < 9; i++) {
+	if(pthread_create(&tid[2+i], NULL, check_subgrid, num + i) != 0) {
+	    fprintf(stderr, "pthread_create error: check_subgrid\n");
+	    return;
+	}
     }
+ 
     /*
      * 11개의 스레드가 종료할 때까지 기다린다.
      */
