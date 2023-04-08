@@ -5,7 +5,7 @@
  * 프로그램을 수정할 경우 날짜, 학과, 학번, 이름, 수정 내용을 기록한다.
  */
 /*
- * Edited by Kim Taehyeon (소프트웨어학부 2019061658 김태현)
+ * Edited by Kim Taehyeon (소프트웨어학부 2019061658 김태현) (23.3.30)
  * Threading Process that checks whether sudoku is valid or not
  */
 #include <stdio.h>
