@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <stdatomic.h> // atomic 변수 추가를 위한 header 파일 추가 (23.5.7)
 
 #define N 8
 #define MAX 1024
@@ -38,6 +39,9 @@ int consumed = 0;
  */
 bool alive = true;
 
+// Critical Section 진입에 대한 변수 추가 (23.5.7)
+atomic_bool lock = false;
+
 /*
  * 생산자 스레드로 실행할 함수이다. 아이템을 생성하여 버퍼에 넣는다.
  */
@@ -47,13 +51,28 @@ void *producer(void *arg)
     int item;
     
     while (alive) {
-        /*
+		// Critical Section 시작을 위한 CAE 명령어 추가 (23.5.7)
+		bool expected = false;
+		while (!atomic_compare_exchange_weak(&lock, &expected, true))
+			expected = false;
+		
+		// counter 변수를 통해 BUF_SIZE 를 꽉 채웠는지 확인 (23.5.7)
+		if (counter >= BUFSIZE) {
+			// Critical Section 종료 (23.5.7)
+			lock = false;
+
+			continue;
+		}
+
+		/*
          * 새로운 아이템을 생산하여 버퍼에 넣고 관련 변수를 갱신한다.
          */
-        item = next_item++;
+		item = next_item++;
+
         buffer[in] = item;
         in = (in + 1) % BUFSIZE;
         counter++;
+
         /*
          * 생산자를 기록하고 중복생산이 아닌지 검증한다.
          */
@@ -63,12 +82,19 @@ void *producer(void *arg)
         }
         else {
             printf("<P%d,%d>....ERROR: 아이템 %d 중복생산\n", i, item, item);
+
+			// Critical Section 종료 (23.5.7)
+			lock = false;
+
             continue;
         }
         /*
          * 생산한 아이템을 출력한다.
          */
         printf("<P%d,%d>\n", i, item);
+
+		// Critical Section 종료 (23.5.7)
+		lock = false;
     }
     pthread_exit(NULL);
 }
@@ -82,6 +108,19 @@ void *consumer(void *arg)
     int item;
     
     while (alive) {
+		// Critical Section 시작을 위한 CAE 명령어 추가 (23.5.7)
+		bool expected = false;
+		while (!atomic_compare_exchange_weak(&lock, &expected, true))
+			expected = false;
+		
+		// counter 변수를 통해 아이템 생성된지 확인 (23.5.7)
+		if (counter <= 0) {
+			// Critical Section 종료 (23.5.7)
+			lock = false;
+
+			continue;
+		}
+
         /*
          * 버퍼에서 아이템을 꺼내고 관련 변수를 갱신한다.
          */
@@ -93,6 +132,10 @@ void *consumer(void *arg)
          */        
         if (task_log[item][0] == -1) {
             printf(RED"<C%d,%d>"RESET"....ERROR: 아이템 %d 미생산\n", i, item, item);
+
+			// Critical Section 종료 (23.5.7)
+			lock = false;
+
             continue;
         }
         else if (task_log[item][1] == -1) {
@@ -101,12 +144,19 @@ void *consumer(void *arg)
         }
         else {
             printf(RED"<C%d,%d>"RESET"....ERROR: 아이템 %d 중복소비\n", i, item, item);
+
+			// Critical Section 종료 (23.5.7)
+			lock = false;
+
             continue;
         }
         /*
          * 소비할 아이템을 빨간색으로 출력한다.
          */
         printf(RED"<C%d,%d>"RESET"\n", i, item);
+
+		// Critical Section 종료 (23.5.7)
+		lock = false;
     }
     pthread_exit(NULL);
 }
