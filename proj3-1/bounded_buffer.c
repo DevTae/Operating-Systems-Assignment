@@ -81,20 +81,21 @@ void *producer(void *arg)
             produced++;
         }
         else {
-            printf("<P%d,%d>....ERROR: 아이템 %d 중복생산\n", i, item, item);
-
 			// Critical Section 종료 (23.5.7)
 			lock = false;
 
+			printf("<P%d,%d>....ERROR: 아이템 %d 중복생산\n", i, item, item);
+
             continue;
         }
+
+		// Critical Section 종료 (23.5.7)
+		lock = false;
+
         /*
          * 생산한 아이템을 출력한다.
          */
         printf("<P%d,%d>\n", i, item);
-
-		// Critical Section 종료 (23.5.7)
-		lock = false;
     }
     pthread_exit(NULL);
 }
@@ -131,10 +132,10 @@ void *consumer(void *arg)
          * 소비자를 기록하고 미생산 또는 중복소비 아닌지 검증한다.
          */        
         if (task_log[item][0] == -1) {
-            printf(RED"<C%d,%d>"RESET"....ERROR: 아이템 %d 미생산\n", i, item, item);
-
 			// Critical Section 종료 (23.5.7)
 			lock = false;
+
+            printf(RED"<C%d,%d>"RESET"....ERROR: 아이템 %d 미생산\n", i, item, item);
 
             continue;
         }
@@ -143,21 +144,22 @@ void *consumer(void *arg)
             consumed++;
         }
         else {
-            printf(RED"<C%d,%d>"RESET"....ERROR: 아이템 %d 중복소비\n", i, item, item);
-
 			// Critical Section 종료 (23.5.7)
 			lock = false;
 
+            printf(RED"<C%d,%d>"RESET"....ERROR: 아이템 %d 중복소비\n", i, item, item);
+
             continue;
         }
+
+		// Critical Section 종료 (23.5.7)
+		lock = false;
+
         /*
          * 소비할 아이템을 빨간색으로 출력한다.
          */
         printf(RED"<C%d,%d>"RESET"\n", i, item);
-
-		// Critical Section 종료 (23.5.7)
-		lock = false;
-    }
+	}
     pthread_exit(NULL);
 }
 
