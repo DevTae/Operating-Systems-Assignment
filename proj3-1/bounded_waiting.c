@@ -32,27 +32,23 @@ bool alive = true;
 atomic_bool lock = false; // spinlock 구현을 위하여 atomic_bool 변수 선언 (23.5.7)
 
 /*
- * 각 쓰레드에 대하여 우선순위를 설정 (23.5.7)
- * 기본 값을 0으로 설정하고 값이 낮을수록 우선순위가 높은 것으로 가정
- * 추가적인 작업을 하지 않은 상황에서는 worker 쓰레드 여러 개의 모든 우선순위가 동일함
- * 쓰레드 N 개에 대하여 일정 차례를 바탕으로 유한대기 문제를 해결하기 위해서는
- * waiting_priority 에 waiting 
- */
-int waiting_priority[N]; 
-
-/*
  * N 개의 스레드가 임계구역에 배타적으로 들어가기 위해 스핀락을 사용하여 동기화한다.
  */
 void *worker(void *arg)
 {
     int i = *(int *)arg;
     
-    while (alive) {
+    while (alive) {	
+		// CAE 함수를 사용하여 CS에 순차적으로 들어가는 알고리즘임 (23.5.7)
+		waiting[i] = true; // 다른 프로세스가 CS 에 있으니 i 는 기다림 (23.5.10)
 
-		// CAE 함수를 통해 임계 구역에 다중 접근을 허용하지 않도록 한다. (23.5.7)
 		bool expected = false;
-		while (!atomic_compare_exchange_weak(&lock, &expected, true))
+		
+		// 다른 프로세스에 의해 lock 을 이양 받거나 lock 이 해제된 상태라면 lock 을 걸게 됨 (23.5.10)
+		while (waiting[i] && !atomic_compare_exchange_weak(&lock, &expected, true))
 			expected = false;
+
+		waiting[i] = false;
 
         /*
          * 임계구역: 알파벳 문자를 한 줄에 40개씩 10줄 출력한다.
@@ -66,9 +62,17 @@ void *worker(void *arg)
         /*
          * 임계구역이 성공적으로 종료되었다.
          */
-
-		// Critical Section 종료로 인한 lock 해제 진행 (23.5.7)
-		lock = false;
+		
+		// CS 에 순차적으로 들어가는 알고리즘임 (23.5.10)
+		int j = (i + 1) % N;
+		
+		while (j != i && !waiting[j])
+			j = (j + 1) % N;
+		
+		if (j == i) // 기다리는 프로세스가 없어 lock 을 품 (23.5.10)
+			lock = false;
+		else
+			waiting[j] = false;
     }
     pthread_exit(NULL);
 }
