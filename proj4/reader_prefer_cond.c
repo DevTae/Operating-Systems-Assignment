@@ -368,6 +368,14 @@ char *img5[L5] = {
  */
 bool alive = true;
 
+// mutex 및 condition 변수 선언 (23.5.22)
+pthread_mutex_t mutex;
+pthread_cond_t reader_cond;
+pthread_cond_t writer_cond;
+// reader_count 및 writer_count 변수를 통해 현재 실행 중인 상태를 확인할 수 있고 상호 배제를 구현할 수 있다. (23.5.22)
+int reader_count = 0;
+int writer_count = 0;
+
 /*
  * Reader 스레드는 같은 문자를 L0번 출력한다. 예를 들면 <AAA...AA> 이런 식이다.
  * 출력할 문자는 인자를 통해 0이면 A, 1이면 B, ..., 등으로 출력하며, 시작과 끝을 <...>로 나타낸다.
@@ -386,6 +394,15 @@ void *reader(void *arg)
      * 스레드가 살아 있는 동안 같은 문자열 시퀀스 <XXX...XX>를 반복해서 출력한다.
      */
     while (alive) {
+
+		// 실행 중인 writer 가 종료되면 바로 reader 가 실행됨. (23.5.22) 
+		pthread_mutex_lock(&mutex);
+		while (writer_count != 0) {
+			pthread_cond_wait(&reader_cond, &mutex);
+		}
+		reader_count++;
+		pthread_mutex_unlock(&mutex);
+
         /*
          * Begin Critical Section
          */
@@ -396,6 +413,13 @@ void *reader(void *arg)
         /* 
          * End Critical Section
          */
+
+		// reader 가 종료되고 아무도 읽으려고 하지 않는다면 writer condition 변수에 대하여 signal 을 보내준다. (23.5.22)
+		pthread_mutex_lock(&mutex);
+		reader_count--;
+		if(reader_count == 0)
+			pthread_cond_signal(&writer_cond);
+		pthread_mutex_unlock(&mutex);
     }
     pthread_exit(NULL);
 }
@@ -424,6 +448,15 @@ void *writer(void *arg)
         /*
          * Begin Critical Section
          */
+
+		// 아무도 읽거나 쓰지 않는 상태에서 writer 가 실행된다. (23.5.22)
+		pthread_mutex_lock(&mutex);
+		while(reader_count != 0 || writer_count != 0) {
+			pthread_cond_wait(&writer_cond, &mutex);
+		}
+		writer_count++;
+		pthread_mutex_unlock(&mutex);
+
         printf("\n");
         switch (id) {
             case 0:
@@ -449,6 +482,14 @@ void *writer(void *arg)
             default:
                 ;
         }
+
+		// writer 가 모두 실행되고 나서 reader 와 writer 의 condition 변수에 signal 을 보내준다. (23.5.22)
+		pthread_mutex_lock(&mutex);
+		writer_count--;
+		pthread_cond_signal(&reader_cond);
+		pthread_cond_signal(&writer_cond);
+		pthread_mutex_unlock(&mutex);
+
         /* 
          * End Critical Section
          */
@@ -474,6 +515,11 @@ int main(void)
     pthread_t rthid[NREAD];
     pthread_t wthid[NWRITE];
     struct timespec req;
+	
+	// mutex 및 condition 변수 할당 (23.5.22)
+	pthread_mutex_init(&mutex, NULL);
+	pthread_cond_init(&reader_cond, NULL);
+	pthread_cond_init(&writer_cond, NULL);
 
     /*
      * Create NREAD reader threads
@@ -509,6 +555,11 @@ int main(void)
         pthread_join(rthid[i], NULL);
     for (i = 0; i < NWRITE; ++i)
         pthread_join(wthid[i], NULL);
+
+	// mutex 및 condition 변수 할당 해제 (23.5.22)
+	pthread_mutex_destroy(&mutex);
+	pthread_cond_destroy(&reader_cond);
+	pthread_cond_destroy(&writer_cond);
     
     return 0;
 }
