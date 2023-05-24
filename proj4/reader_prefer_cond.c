@@ -486,7 +486,7 @@ void *writer(void *arg)
 		// writer 가 모두 실행되고 나서 reader 와 writer 의 condition 변수에 signal 을 보내준다. (23.5.22)
 		pthread_mutex_lock(&mutex);
 		writer_count--;
-		pthread_cond_signal(&reader_cond);
+		pthread_cond_broadcast(&reader_cond);
 		pthread_cond_signal(&writer_cond);
 		pthread_mutex_unlock(&mutex);
 
