@@ -4,7 +4,12 @@
  * 한양대학교 ERICA 학생이 아닌 이는 프로그램을 수정하거나 배포할 수 없다.
  * 프로그램을 수정할 경우 날짜, 학과, 학번, 이름, 수정 내용을 기록한다.
  */
+// Developed by DevTae (Kim Taehyeon / 컴퓨터학과 / 3학년 2019061658)
+
 #include "pthread_pool.h"
+#include <stdlib.h>
+#include <stdio.h>
+#define MAX(a, b) ((a > b) ? a : b) // MAX 함수 선언
 
 /*
  * 풀에 있는 일꾼(일벌) 스레드가 수행할 함수이다.
@@ -14,7 +19,7 @@
  */
 static void *worker(void *param)
 {
-    // 여기를 완성하세요
+    printf("123");
 }
 
 /*
@@ -29,7 +34,43 @@ static void *worker(void *param)
  */
 int pthread_pool_init(pthread_pool_t *pool, size_t bee_size, size_t queue_size)
 {
-    // 여기를 완성하세요
+    // pool 조건 확인 (23.6.6)
+    if (bee_size > POOL_MAXBSIZE || queue_size > POOL_MAXQSIZE)
+        return POOL_FAIL;
+
+    // bee_size > queue_size 인 상황에서의 queue_size 상향 (23.6.6)
+    queue_size = MAX(bee_size, queue_size);
+
+    // pool 변수 초기화 및 할당 (23.6.6)
+    if((pool = (pthread_pool_t *)malloc(sizeof(pthread_pool_t))) == NULL) {
+        return POOL_FAIL;
+    }
+    pool->running = true;                                    // 스레드풀의 실행 또는 종료 상태
+    
+    if((pool->q = (task_t *)malloc(sizeof(task_t) * queue_size)) == NULL) { // FIFO 작업 대기열로 사용할 원형 버퍼
+        return POOL_FAIL;
+    }
+    pool->q_size = queue_size;                               // 원형 버퍼 q 배열의 크기
+    pool->q_front = 0;                                       // 대기열에서 다음에 실행될 작업의 위치
+    pool->q_len = 0;                                         // 대기열의 길이
+    if((pool->bee = (pthread_t *)malloc(sizeof(pthread_t) * bee_size)) == NULL) { // 일꾼(일벌) 스레드의 ID를 저장하기 위한 배열
+        return POOL_FAIL;
+    }
+    if(pool->bee == NULL) return POOL_FAIL;
+    pool->bee_size = bee_size;                               // bee 배열의 크기로 일꾼 스레드의 수를 의미
+    pthread_mutex_init(&(pool->mutex), NULL);                // 대기열을 접근하기 위해 사용되는 상호배타 락
+    pthread_cond_init(&(pool->full), NULL);                  // 빈 대기열에 새 작업이 들어올 때까지 기다리는 곳
+    pthread_cond_init(&(pool->empty), NULL);                 // 대기열에 빈 자리가 발생할 때까지 기다리는 곳
+
+    // worker 함수 할당 (23.6.6)
+    int tmp[bee_size];
+    for(int i = 0; i < bee_size; i++) {
+        tmp[i] = i;
+        pthread_create(&(pool->bee[tmp[i]]), NULL, worker, tmp + i);
+    }
+
+    // pool 생성 성공 시 POOL_SUCCESS 반환
+    return POOL_SUCCESS;
 }
 
 /*
@@ -41,6 +82,7 @@ int pthread_pool_init(pthread_pool_t *pool, size_t bee_size, size_t queue_size)
 int pthread_pool_submit(pthread_pool_t *pool, void (*f)(void *p), void *p, int flag)
 {
     // 여기를 완성하세요
+    return 0;
 }
 
 /*
@@ -55,4 +97,5 @@ int pthread_pool_submit(pthread_pool_t *pool, void (*f)(void *p), void *p, int f
 int pthread_pool_shutdown(pthread_pool_t *pool, int how)
 {
     // 여기를 완성하세요
+    return 0;
 }
