@@ -141,16 +141,16 @@ int pthread_pool_submit(pthread_pool_t *pool, void (*f)(void *p), void *p, int f
         pthread_cond_wait(&(pool->empty), &(pool->mutex));
     }
 
-    // POOL_NOWAIT 에 꽉 찼다면 POOL_FULL 반환
-    if (pool->q_len == pool->q_size) {
-        pthread_mutex_unlock(&(pool->mutex));
-        return POOL_FULL;
-    }
-
     // pool 이 running 상태가 아닌 경우  POOL_FAIL 반환
     if (!pool->running) {
         pthread_mutex_unlock(&(pool->mutex));
         return POOL_FAIL;
+    }    
+    
+    // POOL_NOWAIT 에 꽉 찼다면 POOL_FULL 반환
+    if (pool->q_len == pool->q_size) {
+        pthread_mutex_unlock(&(pool->mutex));
+        return POOL_FULL;
     }
 
     // 대기열 빈 자리 인덱스 저장 공간 (23.6.8)
