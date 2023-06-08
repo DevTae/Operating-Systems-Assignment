@@ -144,6 +144,7 @@ int main(void)
         return -1;
     }
     printf("pthread_pool_shutdown(): 완료......PASSED\n");
+    //return -1; // test
     if (pthread_pool_init(&pool1, 64, 64)) {
         printf("Error: 스레드풀 초기화 오류\n");
         return -1;

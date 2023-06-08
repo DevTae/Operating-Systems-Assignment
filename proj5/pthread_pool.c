@@ -8,10 +8,7 @@
 
 #include "pthread_pool.h"
 #include <stdlib.h>
-#include <stdio.h>
 #define MAX(a, b) ((a > b) ? a : b) // MAX 함수 선언
-
-static bool active = true;
 
 /*
  * 풀에 있는 일꾼(일벌) 스레드가 수행할 함수이다.
@@ -23,37 +20,35 @@ static void *worker(void *param)
 {
     // pool 주소 받아오기 (23.6.6)
     pthread_pool_t *pool = (pthread_pool_t *)param;
-    while (active) {
+
+    while (true) {
         // 상호배타 mutex 획득 (23.6.6)
         pthread_mutex_lock(&(pool->mutex));
         
         // 대기열에 기다리는 함수가 있는지 확인 (23.6.7)
-        while(pool->q_len > 0) {
+        while(pool->q_len == 0) {
+            if (!pool->running) {
+                pthread_mutex_unlock(&(pool->mutex));
+                pthread_exit(NULL);
+            }
             pthread_cond_wait(&(pool->full), &(pool->mutex));
         }
         
         // 실행할 작업의 위치를 저장함 (23.6.8)
         int to_exec = pool->q_front;
+        task_t task = pool->q[to_exec];
 
-        // 다음에 실행될 작업의 위치를 설정해줌 (23.6.7)
-        pool->q_front = (pool->q_front + 1) %2;// ((*pool).q_size);
+        // 큐 인덱스 갱신 (23.6.8)
+        pool->q_front = (pool->q_front + 1) % pool->q_size;
+        pool->q_len--;
         
-        // 상호배타 mutex 반환 (23.6.8)
+        // 조건변수 시그널 및 뮤텍스 반환 (23.6.8)
+        pthread_cond_signal(&(pool->empty));
         pthread_mutex_unlock(&(pool->mutex));
     
         // 대기열에서 기다리는 함수 실행 (23.6.7)
-        ((pool->q) + to_exec)->function(((pool->q) + to_exec)->param);
-    
-        // 함수가 종료된 뒤에 대기열 줄이고 비었음을 알림 (23.6.7)
-        pthread_mutex_lock(&(pool->mutex));
-        ((pool->q) + to_exec)->function = NULL;
-        ((pool->q) + to_exec)->param = NULL;
-        pool->q_len--;
-        pthread_cond_signal(&(pool->empty));
-        pthread_mutex_unlock(&(pool->mutex));
+        (*(task.function))(task.param);
     }
-
-    return NULL;
 }
 
 /*
@@ -76,33 +71,44 @@ int pthread_pool_init(pthread_pool_t *pool, size_t bee_size, size_t queue_size)
     queue_size = MAX(bee_size, queue_size);
 
     // pool 변수 초기화 및 할당 (23.6.6)
-    if((pool = (pthread_pool_t *)malloc(sizeof(pthread_pool_t))) == NULL) {
+    pthread_pool_t *pool_p;
+    if((pool_p = (pthread_pool_t *)malloc(sizeof(pthread_pool_t))) == NULL) {
         return POOL_FAIL;
     }
-    pool->running = true;                                    // 스레드풀의 실행 또는 종료 상태
+    *pool = *pool_p;
     
-    if((pool->q = (task_t *)malloc(sizeof(task_t) * queue_size)) == NULL) { // FIFO 작업 대기열로 사용할 원형 버퍼
+    // 스레드풀의 실행 또는 종료 상태
+    pool->running = true;
+    
+    // FIFO 작업 대기열로 사용할 원형 버퍼
+    if((pool->q = (task_t *)malloc(sizeof(task_t) * queue_size)) == NULL) {
         return POOL_FAIL;
     } 
     
-    pool->q_size = queue_size;                               // 원형 버퍼 q 배열의 크기
-    pool->q_front = 0;                                       // 대기열에서 다음에 실행될 작업의 위치
-    pool->q_len = 0;                                         // 대기열의 길이
-    if((pool->bee = (pthread_t *)malloc(sizeof(pthread_t) * bee_size)) == NULL) { // 일꾼(일벌) 스레드의 ID를 저장하기 위한 배열
+    // 원형 버퍼 q 배열의 크기
+    pool->q_size = queue_size;
+    // 대기열에서 다음에 실행될 작업의 위치
+    pool->q_front = 0;
+    // 대기열의 길이
+    pool->q_len = 0;
+
+    // 일꾼(일벌) 스레드의 ID를 저장하기 위한 배열
+    if((pool->bee = (pthread_t *)malloc(sizeof(pthread_t) * bee_size)) == NULL) {
         return POOL_FAIL;
     }
     
-    if(pool->bee == NULL) return POOL_FAIL;
-    pool->bee_size = bee_size;                               // bee 배열의 크기로 일꾼 스레드의 수를 의미
-    pthread_mutex_init(&(pool->mutex), NULL);                // 대기열을 접근하기 위해 사용되는 상호배타 락
-    pthread_cond_init(&(pool->full), NULL);                  // 빈 대기열에 새 작업이 들어올 때까지 기다리는 곳
-    pthread_cond_init(&(pool->empty), NULL);                 // 대기열에 빈 자리가 발생할 때까지 기다리는 곳
+    // bee 배열의 크기로 일꾼 스레드의 수를 의미
+    pool->bee_size = bee_size;
+    // 대기열을 접근하기 위해 사용되는 상호배타 락
+    pthread_mutex_init(&(pool->mutex), NULL);
+    // 빈 대기열에 새 작업이 들어올 때까지 기다리는 곳
+    pthread_cond_init(&(pool->full), NULL);
+    // 대기열에 빈 자리가 발생할 때까지 기다리는 곳
+    pthread_cond_init(&(pool->empty), NULL);
     
     // worker 함수 할당 (23.6.6)
-    int num[bee_size];
     for(int i = 0; i < bee_size; i++) {
-        num[i] = i;
-        pthread_create(&(pool->bee[num[i]]), NULL, worker, (void*)(pool->q)); // pool queue 전달
+        pthread_create(pool->bee + i, NULL, worker, pool); // pool pointer 전달
     }
     
     // pool 생성 성공 시 POOL_SUCCESS 반환 (23.6.6)
@@ -127,37 +133,34 @@ int pthread_pool_submit(pthread_pool_t *pool, void (*f)(void *p), void *p, int f
     // 상호배제 mutex 획득 (23.6.8)
     pthread_mutex_lock(&(pool->mutex));
     
-    // 만약 pool 이 실행 중이 아니라면 실패 (23.6.6)
-    if (!pool->running)
-        return POOL_FAIL;
- 
-    // 대기열 빈 자리 인덱스 저장 공간 (23.6.8)
-    int index = -1;
-
-    // 만약 pool 의 queue 가 가득 찼다면 flag 에 따라 처리 진행 (23.6.6)
-    if (pool->q_len == pool->q_size) {
-        switch (flag) {
-            case POOL_NOWAIT: // NOWAIT 인 경우 mutex 및 POOL_FULL 반환
-                pthread_mutex_unlock(&(pool->mutex));
-                return POOL_FULL;
-
-            case POOL_WAIT: // WAIT 인 경우 empty 조건 변수를 바탕으로 삽입을 기다림.
-                // 다음 실행 대기 공간이 비었는지 확인 (23.6.8)
-                while ((pool->q[index]).function != NULL) {
-                    index = (pool->q_front + pool->q_len) % ((*pool).q_size);
-                    pthread_cond_wait(&(pool->empty), &(pool->mutex));
-                }
-                break;
-
-            default: // 나머지의 경우 오류이므로 FAIL 반환
-                return POOL_FAIL;
-        }
+    // 다음 조건이 모두 성립할 때, 조건변수를 바탕으로 대기함 (23.6.8)
+    // 1. 큐가 가득 찼음
+    // 2. pool 이 running 상태임
+    // 3. POOL_WAIT 옵션임
+    while (pool->q_len == pool->q_size && pool->running && flag == POOL_WAIT) {
+        pthread_cond_wait(&(pool->empty), &(pool->mutex));
     }
-    
+
+    // POOL_NOWAIT 에 꽉 찼다면 POOL_FULL 반환
+    if (pool->q_len == pool->q_size) {
+        pthread_mutex_unlock(&(pool->mutex));
+        return POOL_FULL;
+    }
+
+    // pool 이 running 상태가 아닌 경우  POOL_FAIL 반환
+    if (!pool->running) {
+        pthread_mutex_unlock(&(pool->mutex));
+        return POOL_FAIL;
+    }
+
+    // 대기열 빈 자리 인덱스 저장 공간 (23.6.8)
+    int index = (pool->q_front + pool->q_len) % pool->q_size;
+
     // 넣을 공간을 찾았다면 그대로 집어넣기 (23.6.8)
-    (pool->q + index)->function = f;
-    (pool->q + index)->param = p;
+    pool->q[index].function = f;
+    pool->q[index].param = p;
     pool->q_len++;
+
     pthread_cond_signal(&(pool->full));
 
     // 상호배제 mutex 반환 (23.6.8)
@@ -177,38 +180,41 @@ int pthread_pool_submit(pthread_pool_t *pool, void (*f)(void *p), void *p, int f
  */
 int pthread_pool_shutdown(pthread_pool_t *pool, int how)
 {
-    // 반복문 비활성화 (23.6.8)
-    active = false;
-
-    // 일꾼 스레드 정보 저장 (23.6.8)
+    // 상호배제 mutex 획득 (23.6.8)
     pthread_mutex_lock(&(pool->mutex));
+
+    // 더 이상의 요청을 받지 않음.
+    pool->running = false;
 
     // how 에 따라 처리 진행 (23.6.8)
     switch (how) {
         case POOL_DISCARD:
-            pool->running = false;
-            pool->q_len = 0; // 대기열 모두 삭제
+            // 대기열 모두 삭제 (23.6.8)
+            pool->q_len = 0;
             break;
             
         case POOL_COMPLETE:
-            pool->running = false;
             break;
-
-        default:
-            return POOL_FAIL;
     }
     
+    // 종료할 스레드는 모두 종료시키도록 신호를 보냄 (23.6.8)
+    pthread_cond_broadcast(&(pool->full));
+    pthread_cond_broadcast(&(pool->empty));
+
+    // 상호배제 mutex 반환 (23.6.8)
     pthread_mutex_unlock(&(pool->mutex));
     
-    // 스레드들 join 진행
-    for(int i = 0; i < (*pool).bee_size; i++) {
-        pthread_join((*pool).bee[i], NULL);
+    // 종료한 스레드들 join 진행 (23.6.8)
+    for(int i = 0; i < pool->bee_size; i++) {
+        pthread_join(pool->bee[i], NULL);
     }
 
-    // 스레드풀 메모리 할당 해제 (23.6.8)
-    free((*pool).q);
-    free((*pool).bee);
-    free(pool);
+    // 스레드풀 메모리 및 뮤텍스, 조건변수 할당 해제 (23.6.8)
+    free(pool->bee);
+    free(pool->q);
+    pthread_cond_destroy(&(pool->empty));
+    pthread_cond_destroy(&(pool->full));
+    pthread_mutex_destroy(&(pool->mutex));
 
     return POOL_SUCCESS;
 }
